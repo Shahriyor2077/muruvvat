@@ -10,15 +10,16 @@ export class BotUpdate {
   async onStart(@Ctx() ctx: Context) {
     try {
       const user_id = ctx.from?.id;
-      const user = await Bot.findOne({ where: { user_id: String(user_id) } });
+      const user = await this.botService.getUserById(String(user_id));
 
       if (!user) {
-        const newUser = await Bot.create({
+        await this.botService.createUser({
           user_id: String(ctx.from?.id)!,
           first_name: ctx.from?.first_name,
           last_name: ctx.from?.last_name,
           last_state: "role",
         });
+
         ctx.reply("Qaysi ro'ldan ro'yxatdan o'tmoqchisiz?", {
           reply_markup: {
             inline_keyboard: [
@@ -80,16 +81,15 @@ export class BotUpdate {
       const callbackData = ctx.callbackQuery!["data"];
       const user_id = callbackData.split("__")[1];
 
-      const user = await Bot.findOne({ where: { user_id: String(user_id) } });
+      const user = await this.botService.getUserById(String(user_id));
       if (!user) {
         await ctx.reply("Siz hali ro'yxatdan o'tmagansiz", {
           parse_mode: "HTML",
           ...Markup.keyboard(["/start"]).resize().oneTime(),
         });
       } else {
-        user.role = "sahiy";
-        user.last_state = "name";
-        await user.save();
+        await this.botService.updateUserRole(String(user_id), "sahiy");
+        await this.botService.updateUserState(String(user_id), "name");
 
         await ctx.answerCbQuery("Sahiy ro'li tanlandi! ✅");
 
@@ -106,16 +106,15 @@ export class BotUpdate {
       const callbackData = ctx.callbackQuery!["data"];
       const user_id = callbackData.split("__")[1];
 
-      const user = await Bot.findOne({ where: { user_id: String(user_id) } });
+      const user = await this.botService.getUserById(String(user_id));
       if (!user) {
         await ctx.reply("Siz hali ro'yxatdan o'tmagansiz", {
           parse_mode: "HTML",
           ...Markup.keyboard(["/start"]).resize().oneTime(),
         });
       } else {
-        user.role = "sabrli";
-        user.last_state = "name";
-        await user.save();
+        await this.botService.updateUserRole(String(user_id), "sabrli");
+        await this.botService.updateUserState(String(user_id), "name");
 
         await ctx.answerCbQuery("Sabrli ro'li tanlandi! ✅");
 
@@ -130,7 +129,7 @@ export class BotUpdate {
   async onText(@Ctx() ctx: Context) {
     try {
       const user_id = ctx.from?.id;
-      const user = await Bot.findOne({ where: { user_id: String(user_id) } });
+      const user = await this.botService.getUserById(String(user_id));
       if (!user) {
         await ctx.reply("Siz hali ro'yxatdan o'tmagansiz", {
           parse_mode: "HTML",
@@ -139,9 +138,11 @@ export class BotUpdate {
       } else {
         if (user && user.last_state == "name") {
           if ("text" in ctx.msg) {
-            user.name = ctx.msg.text;
-            user.last_state = "phone_number";
-            await user.save();
+            await this.botService.updateUserName(String(user_id), ctx.msg.text);
+            await this.botService.updateUserState(
+              String(user_id),
+              "phone_number"
+            );
 
             ctx.reply("📱 Telefon raqamingizni yuboring", {
               ...Markup.keyboard([
@@ -152,8 +153,10 @@ export class BotUpdate {
         } else if (user && user.last_state == "location") {
           if ("text" in ctx.msg) {
             if (ctx.msg.text === "O'tkazib yuborish") {
-              user.last_state = "completed";
-              await user.save();
+              await this.botService.updateUserState(
+                String(user_id),
+                "completed"
+              );
 
               ctx.reply(
                 `✅ Siz muvaffaqiyatli ro'yxatdan o'tdingiz!\n\n👤 Ism: ${user.name}\n📱 Telefon: ${user.phone_number}\n🎭 Rol: ${user.role === "sahiy" ? "Sahiy" : "Sabrli"}\n📍 Manzil: Ko'rsatilmagan`,
@@ -169,8 +172,10 @@ export class BotUpdate {
                 }
               );
             } else {
-              user.last_state = "completed";
-              await user.save();
+              await this.botService.updateUserState(
+                String(user_id),
+                "completed"
+              );
 
               ctx.reply(
                 `✅ Siz muvaffaqiyatli ro'yxatdan o'tdingiz!\n\n👤 Ism: ${user.name}\n📱 Telefon: ${user.phone_number}\n🎭 Rol: ${user.role === "sahiy" ? "Sahiy" : "Sabrli"}\n📍 Manzil: ${ctx.msg.text}`,
@@ -189,12 +194,11 @@ export class BotUpdate {
           }
         } else if (user && user.last_state == "edit_name") {
           if ("text" in ctx.msg) {
-            user.name = ctx.msg.text;
-            user.last_state = "completed";
-            await user.save();
+            await this.botService.updateUserName(String(user_id), ctx.msg.text);
+            await this.botService.updateUserState(String(user_id), "completed");
 
             ctx.reply(
-              `✅ Ismingiz muvaffaqiyatli o'zgartirildi!\n\n👤 Yangi ism: ${user.name}`,
+              `✅ Ismingiz muvaffaqiyatli o'zgartirildi!\n\n👤 Yangi ism: ${ctx.msg.text}`,
               {
                 reply_markup: {
                   keyboard: [
@@ -209,8 +213,7 @@ export class BotUpdate {
           }
         } else if (user && user.last_state == "edit_location") {
           if ("text" in ctx.msg) {
-            user.last_state = "completed";
-            await user.save();
+            await this.botService.updateUserState(String(user_id), "completed");
 
             ctx.reply(
               `✅ Manzilingiz muvaffaqiyatli o'zgartirildi!\n\n📍 Yangi manzil: ${ctx.msg.text}`,
@@ -300,7 +303,7 @@ export class BotUpdate {
   async onContact(@Ctx() ctx: Context) {
     try {
       const user_id = ctx.from?.id;
-      const user = await Bot.findOne({ where: { user_id: String(user_id) } });
+      const user = await this.botService.getUserById(String(user_id));
       if (!user) {
         await ctx.reply("Siz hali ro'yxatdan o'tmagansiz", {
           parse_mode: "HTML",
@@ -309,9 +312,11 @@ export class BotUpdate {
       } else {
         if (user && user.last_state == "phone_number") {
           if ("contact" in ctx.msg) {
-            user.phone_number = ctx.msg.contact.phone_number;
-            user.last_state = "location";
-            await user.save();
+            await this.botService.updateUserPhone(
+              String(user_id),
+              ctx.msg.contact.phone_number
+            );
+            await this.botService.updateUserState(String(user_id), "location");
 
             ctx.reply(
               "📍 Manzilingizni kiriting: ",
@@ -320,12 +325,14 @@ export class BotUpdate {
           }
         } else if (user && user.last_state == "edit_phone") {
           if ("contact" in ctx.msg) {
-            user.phone_number = ctx.msg.contact.phone_number;
-            user.last_state = "completed";
-            await user.save();
+            await this.botService.updateUserPhone(
+              String(user_id),
+              ctx.msg.contact.phone_number
+            );
+            await this.botService.updateUserState(String(user_id), "completed");
 
             ctx.reply(
-              `✅ Telefon raqamingiz muvaffaqiyatli o'zgartirildi!\n\n📱 Yangi telefon: ${user.phone_number}`,
+              `✅ Telefon raqamingiz muvaffaqiyatli o'zgartirildi!\n\n📱 Yangi telefon: ${ctx.msg.contact.phone_number}`,
               {
                 reply_markup: {
                   keyboard: [
@@ -351,12 +358,11 @@ export class BotUpdate {
       const callbackData = ctx.callbackQuery!["data"];
       const user_id = callbackData.split("__")[1];
 
-      const user = await Bot.findOne({ where: { user_id: String(user_id) } });
+      const user = await this.botService.getUserById(String(user_id));
       if (!user) {
         await ctx.reply("Siz hali ro'yxatdan o'tmagansiz");
       } else {
-        user.last_state = "edit_name";
-        await user.save();
+        await this.botService.updateUserState(String(user_id), "edit_name");
 
         await ctx.answerCbQuery("Ismni o'zgartirish tanlandi! ✏️");
 
@@ -373,12 +379,11 @@ export class BotUpdate {
       const callbackData = ctx.callbackQuery!["data"];
       const user_id = callbackData.split("__")[1];
 
-      const user = await Bot.findOne({ where: { user_id: String(user_id) } });
+      const user = await this.botService.getUserById(String(user_id));
       if (!user) {
         await ctx.reply("Siz hali ro'yxatdan o'tmagansiz");
       } else {
-        user.last_state = "edit_phone";
-        await user.save();
+        await this.botService.updateUserState(String(user_id), "edit_phone");
 
         await ctx.answerCbQuery("Telefon raqamni o'zgartirish tanlandi! 📱");
 
@@ -399,12 +404,11 @@ export class BotUpdate {
       const callbackData = ctx.callbackQuery!["data"];
       const user_id = callbackData.split("__")[1];
 
-      const user = await Bot.findOne({ where: { user_id: String(user_id) } });
+      const user = await this.botService.getUserById(String(user_id));
       if (!user) {
         await ctx.reply("Siz hali ro'yxatdan o'tmagansiz");
       } else {
-        user.last_state = "edit_location";
-        await user.save();
+        await this.botService.updateUserState(String(user_id), "edit_location");
 
         await ctx.answerCbQuery("Manzilni o'zgartirish tanlandi! 📍");
 
@@ -421,7 +425,7 @@ export class BotUpdate {
       const callbackData = ctx.callbackQuery!["data"];
       const user_id = callbackData.split("__")[1];
 
-      const user = await Bot.findOne({ where: { user_id: String(user_id) } });
+      const user = await this.botService.getUserById(String(user_id));
       if (!user) {
         await ctx.reply("Siz hali ro'yxatdan o'tmagansiz");
       } else {
@@ -455,12 +459,11 @@ export class BotUpdate {
       const callbackData = ctx.callbackQuery!["data"];
       const user_id = callbackData.split("__")[1];
 
-      const user = await Bot.findOne({ where: { user_id: String(user_id) } });
+      const user = await this.botService.getUserById(String(user_id));
       if (!user) {
         await ctx.reply("Siz hali ro'yxatdan o'tmagansiz");
       } else {
-        user.role = "sahiy";
-        await user.save();
+        await this.botService.updateUserRole(String(user_id), "sahiy");
 
         await ctx.answerCbQuery("Rol Sahiy ga o'zgartirildi! ✅");
 
@@ -489,12 +492,11 @@ export class BotUpdate {
       const callbackData = ctx.callbackQuery!["data"];
       const user_id = callbackData.split("__")[1];
 
-      const user = await Bot.findOne({ where: { user_id: String(user_id) } });
+      const user = await this.botService.getUserById(String(user_id));
       if (!user) {
         await ctx.reply("Siz hali ro'yxatdan o'tmagansiz");
       } else {
-        user.role = "sabrli";
-        await user.save();
+        await this.botService.updateUserRole(String(user_id), "sabrli");
 
         await ctx.answerCbQuery("Rol Sabrli ga o'zgartirildi! ✅");
 
